@@ -1280,9 +1280,9 @@ button:disabled {{ opacity: 0.5; cursor: not-allowed; }}
   </div>
 </div>
 
-<script id="payload" type="text/plain">{{payload}}</script>
+<script id="payload" data-payload="{payload}"></script>
 <script>
-const raw = document.getElementById('payload').textContent.trim();
+const raw = document.getElementById('payload').dataset.payload.trim();
 const data = JSON.parse(atob(raw));
 const nodes = new vis.DataSet(data.nodes);
 const edges = new vis.DataSet(data.edges);
