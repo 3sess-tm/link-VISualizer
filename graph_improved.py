@@ -405,10 +405,14 @@ def resolve_target(base_dir: Path, raw_link: str, root: Path, scan_exts: set[str
     dynamic = is_dynamic_link(link)
     clean = DYNAMIC_RE.sub('dynamic', link)
 
-    if clean.startswith('/'):
-        candidate = (root / clean.lstrip('/')).resolve()
-    else:
-        candidate = (base_dir / clean).resolve()
+    try:
+        if clean.startswith('/'):
+            candidate = (root / clean.lstrip('/')).resolve()
+        else:
+            candidate = (base_dir / clean).resolve()
+    except OSError as e:
+        log(f"Path resolution error: {clean} -> {e}", "DEBUG")
+        return clean, dynamic, False, None
 
     if dynamic:
         return clean, True, False, candidate
@@ -420,7 +424,7 @@ def resolve_target(base_dir: Path, raw_link: str, root: Path, scan_exts: set[str
     except OSError as e:
         # Path too long or other filesystem error - treat as non-existent
         log(f"Skipping path due to error: {e}", "DEBUG")
-        return clean, False, False, candidate
+        return clean, False, False, None
 
     # Try extension guesses
     if '.' not in Path(clean).name:
@@ -442,7 +446,7 @@ def resolve_target(base_dir: Path, raw_link: str, root: Path, scan_exts: set[str
                 log(f"Skipping index trial path due to error: {e}", "DEBUG")
                 continue
 
-    return clean, False, False, candidate
+    return clean, False, False, None
 
 # ===== LOG POPULARITY PARSING =====
 def normalize_request_path(req: str) -> str:
