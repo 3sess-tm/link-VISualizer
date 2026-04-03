@@ -420,7 +420,12 @@ def resolve_target(base_dir: Path, raw_link: str, root: Path, scan_exts: set[str
     # Handle path too long errors gracefully
     try:
         if candidate.exists():
-            return clean, False, False, candidate
+            try:
+                rel = str(candidate.relative_to(root)).replace('\\', '/')
+                return rel, False, False, candidate
+            except ValueError:
+                # Path outside root, treat as not found
+                return clean, False, False, None
     except OSError as e:
         # Path too long or other filesystem error - treat as non-existent
         log(f"Skipping path due to error: {e}", "DEBUG")
@@ -432,7 +437,12 @@ def resolve_target(base_dir: Path, raw_link: str, root: Path, scan_exts: set[str
             trial = candidate.with_suffix('.' + ext)
             try:
                 if trial.exists():
-                    return str(trial.relative_to(root)).replace('\\', '/'), False, False, trial
+                    try:
+                        rel = str(trial.relative_to(root)).replace('\\', '/')
+                        return rel, False, False, trial
+                    except ValueError:
+                        # Outside root
+                        continue
             except OSError as e:
                 log(f"Skipping trial path due to error: {e}", "DEBUG")
                 continue
@@ -441,7 +451,12 @@ def resolve_target(base_dir: Path, raw_link: str, root: Path, scan_exts: set[str
             trial = candidate / ('index.' + ext)
             try:
                 if trial.exists():
-                    return str(trial.relative_to(root)).replace('\\', '/'), False, False, trial
+                    try:
+                        rel = str(trial.relative_to(root)).replace('\\', '/')
+                        return rel, False, False, trial
+                    except ValueError:
+                        # Outside root
+                        continue
             except OSError as e:
                 log(f"Skipping index trial path due to error: {e}", "DEBUG")
                 continue
@@ -576,55 +591,83 @@ def scan_project(cfg: Config) -> ScanResult:
     for i, fpath in enumerate(candidate_files, 1):
         progress(i, len(candidate_files), started, fpath.name)
 
-        # Handle symlinks that point outside root
         try:
-            rel = fpath.resolve().relative_to(root).as_posix()
-        except ValueError:
-            # Symlink target is outside root; use the symlink path itself instead
+            # Handle symlinks that point outside root
             try:
-                rel = fpath.relative_to(root).as_posix()
+                rel = fpath.resolve().relative_to(root).as_posix()
             except ValueError:
-                log(f"Skipping file outside root: {fpath}", "DEBUG")
-                continue
-    
-        folder = group_of(rel)
-        kind = kind_of(rel)
-        folder_set.add(folder)
-        type_set.add(kind)
-        try:
-            size = fpath.stat().st_size
-        except Exception:
-            size = 0
+                # Symlink target is outside root; use the symlink path itself instead
+                try:
+                    rel = fpath.relative_to(root).as_posix()
+                except ValueError:
+                    log(f"Skipping file outside root: {fpath}", "DEBUG")
+                    continue
+        
+            folder = group_of(rel)
+            kind = kind_of(rel)
+            folder_set.add(folder)
+            type_set.add(kind)
+            try:
+                size = fpath.stat().st_size
+            except Exception:
+                size = 0
 
-        # Ensure every scanned file is represented in the graph (including orphans)
-        src_id = safe_id(rel)
-        if src_id not in graph_nodes:
-            graph_nodes[src_id] = {
-                'id': src_id,
-                'label': rel,
-                'group': folder,
-                'kind': kind,
-                'size': size,
-                'color': color_for(rel),
-                'degree': 0,
-                'popularity': 0,
-                'dead': False,
-                'dynamic': False,
-                'external': False,
-                'value': 8,
-            }
+            # Ensure every scanned file is represented in the graph (including orphans)
+            src_id = safe_id(rel)
+            if src_id not in graph_nodes:
+                graph_nodes[src_id] = {
+                    'id': src_id,
+                    'label': rel,
+                    'group': folder,
+                    'kind': kind,
+                    'size': size,
+                    'color': color_for(rel),
+                    'degree': 0,
+                    'popularity': 0,
+                    'dead': False,
+                    'dynamic': False,
+                    'external': False,
+                    'value': 8,
+                }
 
-        text = read_text_best_effort(fpath)
-        for raw in extract_candidates(text):
-            resolved_label, is_dynamic, is_external, resolved_path = resolve_target(fpath.parent, raw, root, scan_exts)
-            if not resolved_label:
-                continue
+            text = read_text_best_effort(fpath)
+            for raw in extract_candidates(text):
+                resolved_label, is_dynamic, is_external, resolved_path = resolve_target(fpath.parent, raw, root, scan_exts)
+                if not resolved_label:
+                    continue
 
-            if is_external:
-                external_links += 1
-                if cfg.include_external_nodes:
-                    # Add external links as nodes (optional feature)
-                    target_id = safe_id(resolved_label)
+                if is_external:
+                    external_links += 1
+                    if cfg.include_external_nodes:
+                        # Add external links as nodes (optional feature)
+                        target_id = safe_id(resolved_label)
+                        src_id = safe_id(rel)
+                        if src_id not in graph_nodes:
+                            graph_nodes[src_id] = {
+                                'id': src_id, 'label': rel, 'group': folder, 'kind': kind, 'size': size,
+                                'color': color_for(rel), 'degree': 0, 'popularity': 0, 'dead': False,
+                                'dynamic': False, 'external': False, 'value': 8,
+                            }
+                        if target_id not in graph_nodes:
+                            graph_nodes[target_id] = {
+                                'id': target_id, 'label': resolved_label, 'group': 'external', 'kind': 'external', 'size': 0,
+                                'color': color_for(resolved_label, external=True), 'degree': 0, 'popularity': 0, 'dead': False,
+                                'dynamic': False, 'external': True, 'value': 6,
+                            }
+                        graph_edges.append({
+                            'id': f'e{edge_id}', 'from': src_id, 'to': target_id, 'label': trim_link(raw)[:80],
+                            'color': '#58a6ff', 'dashes': False, 'arrows': 'to', 'dynamic': False,
+                            'title': f"External link: {escape_html(trim_link(raw))}",
+                        })
+                        edge_id += 1
+                        degree[src_id] += 1
+                        degree[target_id] += 1
+                    continue
+
+                if is_dynamic:
+                    dynamic_links += 1
+                    target_label = f"dynamic:{resolved_label}"
+                    target_id = safe_id(target_label)
                     src_id = safe_id(rel)
                     if src_id not in graph_nodes:
                         graph_nodes[src_id] = {
@@ -634,91 +677,67 @@ def scan_project(cfg: Config) -> ScanResult:
                         }
                     if target_id not in graph_nodes:
                         graph_nodes[target_id] = {
-                            'id': target_id, 'label': resolved_label, 'group': 'external', 'kind': 'external', 'size': 0,
-                            'color': color_for(resolved_label, external=True), 'degree': 0, 'popularity': 0, 'dead': False,
-                            'dynamic': False, 'external': True, 'value': 6,
+                            'id': target_id, 'label': target_label, 'group': 'dynamic', 'kind': 'dynamic', 'size': 0,
+                            'color': color_for(target_label, dynamic=True), 'degree': 0, 'popularity': 0, 'dead': False,
+                            'dynamic': True, 'external': False, 'value': 7,
                         }
                     graph_edges.append({
                         'id': f'e{edge_id}', 'from': src_id, 'to': target_id, 'label': trim_link(raw)[:80],
-                        'color': '#58a6ff', 'dashes': False, 'arrows': 'to', 'dynamic': False,
-                        'title': f"External link: {escape_html(trim_link(raw))}",
+                        'color': '#d29922', 'dashes': True, 'arrows': 'to', 'dynamic': True,
+                        'title': f"Dynamic link: {escape_html(trim_link(raw))}",
                     })
                     edge_id += 1
                     degree[src_id] += 1
                     degree[target_id] += 1
-                continue
+                    continue
 
-            if is_dynamic:
-                dynamic_links += 1
-                target_label = f"dynamic:{resolved_label}"
-                target_id = safe_id(target_label)
+                # FIX: Proper target_rel assignment (was truncated in original)
+                if resolved_path and resolved_path.exists():
+                    try:
+                        target_rel = str(resolved_path.relative_to(root)).replace('\\', '/')
+                    except ValueError:
+                        target_rel = resolved_label
+                else:
+                    target_rel = resolved_label
+
+                exists = bool(resolved_path and resolved_path.exists())
+                if not exists:
+                    dead_links += 1
+
                 src_id = safe_id(rel)
+                dst_id = safe_id(target_rel)
                 if src_id not in graph_nodes:
                     graph_nodes[src_id] = {
                         'id': src_id, 'label': rel, 'group': folder, 'kind': kind, 'size': size,
                         'color': color_for(rel), 'degree': 0, 'popularity': 0, 'dead': False,
                         'dynamic': False, 'external': False, 'value': 8,
                     }
-                if target_id not in graph_nodes:
-                    graph_nodes[target_id] = {
-                        'id': target_id, 'label': target_label, 'group': 'dynamic', 'kind': 'dynamic', 'size': 0,
-                        'color': color_for(target_label, dynamic=True), 'degree': 0, 'popularity': 0, 'dead': False,
-                        'dynamic': True, 'external': False, 'value': 7,
+                if dst_id not in graph_nodes:
+                    dst_kind = kind_of(target_rel)
+                    dst_group = group_of(target_rel)
+                    dst_size = 0
+                    if resolved_path and resolved_path.exists():
+                        try:
+                            dst_size = resolved_path.stat().st_size
+                        except Exception:
+                            dst_size = 0
+                    graph_nodes[dst_id] = {
+                        'id': dst_id, 'label': target_rel, 'group': dst_group, 'kind': dst_kind, 'size': dst_size,
+                        'color': color_for(target_rel, dead=not exists), 'degree': 0, 'popularity': 0, 'dead': not exists,
+                        'dynamic': False, 'external': False, 'value': 8,
                     }
+
                 graph_edges.append({
-                    'id': f'e{edge_id}', 'from': src_id, 'to': target_id, 'label': trim_link(raw)[:80],
-                    'color': '#d29922', 'dashes': True, 'arrows': 'to', 'dynamic': True,
-                    'title': f"Dynamic link: {escape_html(trim_link(raw))}",
+                    'id': f'e{edge_id}', 'from': src_id, 'to': dst_id, 'label': trim_link(raw)[:80],
+                    'color': '#f85149' if not exists else '#6e7681', 'dashes': not exists, 'arrows': 'to',
+                    'dynamic': False, 'title': f"Link: {escape_html(trim_link(raw))}",
                 })
                 edge_id += 1
                 degree[src_id] += 1
-                degree[target_id] += 1
-                continue
-
-            # FIX: Proper target_rel assignment (was truncated in original)
-            if resolved_path and resolved_path.exists():
-                try:
-                    target_rel = str(resolved_path.relative_to(root)).replace('\\', '/')
-                except ValueError:
-                    target_rel = resolved_label
-            else:
-                target_rel = resolved_label
-
-            exists = bool(resolved_path and resolved_path.exists())
-            if not exists:
-                dead_links += 1
-
-            src_id = safe_id(rel)
-            dst_id = safe_id(target_rel)
-            if src_id not in graph_nodes:
-                graph_nodes[src_id] = {
-                    'id': src_id, 'label': rel, 'group': folder, 'kind': kind, 'size': size,
-                    'color': color_for(rel), 'degree': 0, 'popularity': 0, 'dead': False,
-                    'dynamic': False, 'external': False, 'value': 8,
-                }
-            if dst_id not in graph_nodes:
-                dst_kind = kind_of(target_rel)
-                dst_group = group_of(target_rel)
-                dst_size = 0
-                if resolved_path and resolved_path.exists():
-                    try:
-                        dst_size = resolved_path.stat().st_size
-                    except Exception:
-                        dst_size = 0
-                graph_nodes[dst_id] = {
-                    'id': dst_id, 'label': target_rel, 'group': dst_group, 'kind': dst_kind, 'size': dst_size,
-                    'color': color_for(target_rel, dead=not exists), 'degree': 0, 'popularity': 0, 'dead': not exists,
-                    'dynamic': False, 'external': False, 'value': 8,
-                }
-
-            graph_edges.append({
-                'id': f'e{edge_id}', 'from': src_id, 'to': dst_id, 'label': trim_link(raw)[:80],
-                'color': '#f85149' if not exists else '#6e7681', 'dashes': not exists, 'arrows': 'to',
-                'dynamic': False, 'title': f"Link: {escape_html(trim_link(raw))}",
-            })
-            edge_id += 1
-            degree[src_id] += 1
-            degree[dst_id] += 1
+                degree[dst_id] += 1
+        except Exception as e:
+            log(f"Error processing file {fpath}: {e}", "WARNING")
+            continue
 
     # Popularity mapping
     popularity = Counter()
