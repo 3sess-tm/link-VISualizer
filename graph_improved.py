@@ -554,14 +554,25 @@ def scan_project(cfg: Config) -> ScanResult:
         popularity_raw = parse_logs(cfg.log_files)
 
     started = time.time()
+    started = time.time()
     for i, fpath in enumerate(candidate_files, 1):
         progress(i, len(candidate_files), started, fpath.name)
-        rel = fpath.resolve().relative_to(root).as_posix()
+
+        # Handle symlinks that point outside root
+        try:
+            rel = fpath.resolve().relative_to(root).as_posix()
+        except ValueError:
+            # Symlink target is outside root; use the symlink path itself instead
+            try:
+                rel = fpath.relative_to(root).as_posix()
+            except ValueError:
+                log(f"Skipping file outside root: {fpath}", "DEBUG")
+                continue
+    
         folder = group_of(rel)
         kind = kind_of(rel)
         folder_set.add(folder)
         type_set.add(kind)
-
         try:
             size = fpath.stat().st_size
         except Exception:
