@@ -55,7 +55,7 @@ DEFAULT_IGNORE_DIRS = {
     "node_modules", ".git", "__pycache__", "vendor", "dist", "build", ".next", ".cache"
 }
 DEFAULT_SCAN_EXTS = {
-    "html", "htm", "css", "js", "mjs", "ts", "tsx", "php", "phtml", "twig", "xml", "json", "md"
+    "html", "htm", "css", "js", "mjs", "ts", "tsx", "php", "phtml", "twig", "xml", "json", "md", "py", "txt", "svg", "yml", "yaml"
 }
 DEFAULT_HUB_THRESHOLD = 6
 DEFAULT_CONFIG_FILE = ".linkgraphrc"
@@ -846,7 +846,7 @@ body {{
 }}
 
 #sidebarToggle {{
-  display: none;
+  display: block;
   position: fixed;
   top: 10px;
   left: 10px;
@@ -872,6 +872,21 @@ body {{
   padding: 14px;
   box-sizing: border-box;
   transition: transform 0.3s ease;
+  transform: translateX(0);
+}}
+#sidebar.closed {{
+  transform: translateX(-100%);
+}}
+  width: 380px;
+  min-width: 320px;
+  max-width: 500px;
+  height: 100vh;
+  overflow: auto;
+  background: linear-gradient(180deg, var(--panel), #11161d);
+  border-right: 1px solid var(--line);
+  padding: 14px;
+  box-sizing: border-box;
+  transition: transform 0.3s ease;
 }}
 
 #main {{
@@ -887,6 +902,21 @@ body {{
   inset: 0;
   width: 100%;
   height: 100%;
+}}
+
+#emptyMessage {{
+  display: none;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 100%;
+  height: 100%;
+  color: #58a6ff;
+  font-size: 18px;
+  text-align: center;
+  padding-top: 30vh;
+  background: rgba(13,17,23,0.9);
+  z-index: 10;
 }}
 
 #miniWrap {{
@@ -1225,6 +1255,7 @@ button:disabled {{ opacity: 0.5; cursor: not-allowed; }}
     <div class="pill">Double click to focus</div>
   </div>
   <div id="network"></div>
+  <div id="emptyMessage">No graph nodes found. Check scan extension settings, root path, and ignore filters.</div>
   <div id="miniWrap">
     <div id="miniHead">Minimap</div>
     <div id="minimap"></div>
@@ -1280,9 +1311,9 @@ button:disabled {{ opacity: 0.5; cursor: not-allowed; }}
   </div>
 </div>
 
-<script id="payload" data-payload="{payload}"></script>
 <script>
-const raw = document.getElementById('payload').dataset.payload.trim();
+// Use direct JS string for large payloads to avoid DOM data-* size limits
+const raw = "{payload}";
 const data = JSON.parse(atob(raw));
 const nodes = new vis.DataSet(data.nodes);
 const edges = new vis.DataSet(data.edges);
@@ -1419,6 +1450,13 @@ function renderMetaLists() {{
   document.querySelectorAll('#topNodes .listItem').forEach(el => {{
     el.addEventListener('click', () => focusNode(el.dataset.id));
   }});
+
+  const empty = document.getElementById('emptyMessage');
+  if (meta.nodeCount === 0) {{
+    empty.style.display = 'block';
+  }} else {{
+    empty.style.display = 'none';
+  }}
 }}
 
 function applyChip(chipId, checkboxId) {{
@@ -1506,6 +1544,9 @@ function applyFilters() {{
   document.getElementById('statOrphans').textContent = meta.orphanNodes || 0;
   document.getElementById('statHubs').textContent = meta.hubNodes || 0;
   document.getElementById('statAvgDegree').textContent = meta.averageDegree || 0;
+
+  const empty = document.getElementById('emptyMessage');
+  empty.style.display = shown.length === 0 ? 'block' : 'none';
 }}
 
 function resetAll() {{
@@ -1641,13 +1682,32 @@ function toggleSidebar() {{
   const sidebar = document.getElementById('sidebar');
   state.sidebarOpen = !state.sidebarOpen;
   sidebar.classList.toggle('open', state.sidebarOpen);
+  sidebar.classList.toggle('closed', !state.sidebarOpen);
 }}
 
 function closeSidebar() {{
+  const sidebar = document.getElementById('sidebar');
   if (window.innerWidth <= 768) {{
-    const sidebar = document.getElementById('sidebar');
     state.sidebarOpen = false;
     sidebar.classList.remove('open');
+    sidebar.classList.add('closed');
+    return;
+  }}
+  state.sidebarOpen = true;
+  sidebar.classList.remove('closed');
+  sidebar.classList.add('open');
+}}
+
+function adaptSidebarForViewport() {{
+  const sidebar = document.getElementById('sidebar');
+  if (window.innerWidth <= 768) {{
+    state.sidebarOpen = false;
+    sidebar.classList.remove('open');
+    sidebar.classList.add('closed');
+  }} else {{
+    state.sidebarOpen = true;
+    sidebar.classList.add('open');
+    sidebar.classList.remove('closed');
   }}
 }}
 
@@ -1672,7 +1732,10 @@ mainEl.addEventListener('contextmenu', (ev) => {{
 }});
 
 window.addEventListener('click', hideMenu);
-window.addEventListener('resize', () => {{ if (state.miniVisible) miniNetwork.redraw(); }});
+window.addEventListener('resize', () => {{
+  if (state.miniVisible) miniNetwork.redraw();
+  adaptSidebarForViewport();
+}});
 
 // Help modal
 const helpModal = document.getElementById('helpModal');
@@ -1809,6 +1872,7 @@ helpModal.addEventListener('click', (e) => {{ if (e.target === helpModal) closeH
 parseUrlAnchor();
 renderMetaLists();
 resetAll();
+adaptSidebarForViewport();
 
 // Deep link support
 if (state.nodeIdFromUrl) {{

@@ -1,0 +1,1006 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
+<title>LinkGraph Pro</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel2: #0f141b;
+  --line: #30363d;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#sidebarToggle {
+  display: none;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  background: linear-gradient(180deg, #1f6feb, #1857c7);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+#sidebar {
+  width: 380px;
+  min-width: 320px;
+  max-width: 500px;
+  height: 100vh;
+  overflow: auto;
+  background: linear-gradient(180deg, var(--panel), #11161d);
+  border-right: 1px solid var(--line);
+  padding: 14px;
+  box-sizing: border-box;
+  transition: transform 0.3s ease;
+}
+
+#main {
+  flex: 1;
+  height: 100vh;
+  min-width: 0;
+  position: relative;
+  display: flex;
+}
+
+#network {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#miniWrap {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 250px;
+  height: 180px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(13,17,23,0.9);
+  backdrop-filter: blur(8px);
+  display: none;
+  z-index: 4;
+}
+
+#miniHead {
+  padding: 6px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+#minimap { width: 100%; height: calc(100% - 25px); }
+
+#contextMenu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 180px;
+  display: none;
+  background: #0b1017;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  overflow: hidden;
+}
+
+#contextMenu button {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-radius: 0;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+
+#contextMenu button:hover {
+  background: rgba(88,166,255,0.14);
+}
+
+#helpModal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+}
+
+#helpContent {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: auto;
+  color: var(--text);
+}
+
+#helpContent h2 {
+  margin-top: 0;
+  color: #e6edf3;
+}
+
+#helpContent .shortcut {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 12px;
+}
+
+#helpContent .key {
+  background: var(--panel2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: 600;
+  color: #58a6ff;
+}
+
+.section { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.section h3 { margin: 0 0 10px 0; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: #e6edf3; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+input, select, button {
+  width: 100%; box-sizing: border-box; background: #0b1017; color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; font-size: 13px;
+}
+
+button { cursor: pointer; background: linear-gradient(180deg, #1f6feb, #1857c7); border-color: rgba(255,255,255,0.08); font-weight: 700; }
+button.secondary { background: #0b1017; }
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.small { font-size: 12px; color: var(--muted); }
+.chipbar { display:flex; gap:8px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; cursor: pointer; user-select: none; background: #0b1017; font-size: 12px; }
+.chip.on { border-color: #1f6feb; background: rgba(31,111,235,0.18); color: #dbeafe; }
+.listbox { max-height: 240px; overflow: auto; padding-right: 4px; }
+.listItem { margin-bottom: 8px; cursor: pointer; padding: 8px; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; background: rgba(255,255,255,0.02); }
+.listItem:hover { border-color: rgba(88,166,255,0.45); background: rgba(88,166,255,0.08); }
+.statcard { display:grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.02); }
+.stat .big { font-size: 18px; font-weight: 800; color: #e6edf3; }
+.stat .small { font-size: 12px; color: var(--muted); }
+.pillbar { position:absolute; top:10px; left:10px; right:10px; display:flex; flex-wrap:wrap; gap:8px; z-index:3; pointer-events:none; }
+.pillbar > * { pointer-events:auto; }
+.pill { background: rgba(13,17,23,0.86); border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; font-size: 12px; backdrop-filter: blur(8px); }
+.details { display:grid; gap:6px; }
+.kv { display:grid; grid-template-columns: 120px 1fr; gap: 8px; font-size: 12px; }
+.kv div:first-child { color: var(--muted); }
+.legend-item { display:flex; align-items:center; gap:10px; margin-bottom: 8px; font-size: 13px; }
+.swatch { width:12px; height:12px; border-radius:3px; display:inline-block; flex: 0 0 12px; }
+.sw-html { background:#e34c26; }
+.sw-css { background:#2965f1; }
+.sw-js { background:#f7df1e; }
+.sw-dead { background:#f85149; }
+.sw-dyn { background:#d29922; }
+.sw-ext { background:#58a6ff; }
+.sw-pop { background:#2ea043; }
+.topline { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 768px) {
+  body {
+    flex-direction: column;
+  }
+  
+  #sidebarToggle {
+    display: block;
+  }
+  
+  #sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 75vw;
+    max-width: 300px;
+    z-index: 999;
+    transform: translateX(-100%);
+    border-right: 1px solid var(--line);
+  }
+  
+  #sidebar.open {
+    transform: translateX(0);
+  }
+  
+  #main {
+    width: 100%;
+    flex: 1;
+  }
+  
+  #miniWrap {
+    display: none !important;
+  }
+  
+  .pillbar {
+    display: none;
+  }
+  
+  input, select, button {
+    padding: 12px 10px;
+    font-size: 14px;
+  }
+  
+  .row3 {
+    grid-template-columns: 1fr;
+  }
+  
+  #network {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  #sidebar {
+    width: 90vw;
+  }
+  
+  .section {
+    margin-bottom: 12px;
+  }
+  
+  .stat .big {
+    font-size: 16px;
+  }
+}
+</style>
+</head>
+<body>
+<button id="sidebarToggle" aria-label="Toggle sidebar">☰ Menu</button>
+
+<aside id="sidebar" role="navigation" aria-label="Filters and controls">
+  <div class="section">
+    <h3>Search</h3>
+    <input id="include" placeholder="Include terms" aria-label="Include search terms" />
+    <div style="height:8px"></div>
+    <input id="exclude" placeholder="Exclude terms" aria-label="Exclude search terms" />
+    <div style="height:8px"></div>
+    <div class="row3">
+      <select id="matchMode" aria-label="Search match mode">
+        <option value="all">Match all</option>
+        <option value="any">Match any</option>
+        <option value="none">Show non-matches</option>
+      </select>
+      <label class="chip" id="invertChip"><input type="checkbox" id="invert" style="display:none" /> Invert</label>
+      <label class="chip" id="caseChip"><input type="checkbox" id="caseSensitive" style="display:none" /> Case</label>
+    </div>
+    <div style="height:8px"></div>
+    <div class="row3">
+      <button id="applyBtn">Apply</button>
+      <button class="secondary" id="resetBtn">Reset</button>
+      <button class="secondary" id="fitBtn">Fit</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Filters</h3>
+    <div class="row">
+      <select id="typeFilter" aria-label="Filter by file type"></select>
+      <select id="folderFilter" aria-label="Filter by folder"></select>
+    </div>
+    <div style="height:8px"></div>
+    <div class="row3">
+      <label class="chip" id="deadChip"><input type="checkbox" id="deadOnly" style="display:none" /> Dead only</label>
+      <label class="chip" id="popChip"><input type="checkbox" id="popularOnly" style="display:none" /> Popular only</label>
+      <label class="chip" id="dynChip"><input type="checkbox" id="dynamicOnly" style="display:none" /> Dynamic only</label>
+      <label class="chip" id="extChip"><input type="checkbox" id="externalOnly" style="display:none" /> External only</label>
+    </div>
+    <div style="height:8px"></div>
+    <div class="row3">
+      <input id="minPop" type="number" min="0" value="1" title="Minimum popularity" aria-label="Minimum popularity" />
+      <input id="minDegree" type="number" min="0" value="1" title="Minimum degree" aria-label="Minimum degree" />
+      <input id="maxNodes" type="number" min="1" value="5000" title="Limit visible nodes" aria-label="Maximum nodes" />
+    </div>
+    <div style="height:8px"></div>
+    <select id="sortFilter" aria-label="Sort order">
+      <option value="importance">Sort by importance</option>
+      <option value="popularity">Sort by popularity</option>
+      <option value="alphabetical">Sort alphabetically</option>
+      <option value="folder">Sort by folder</option>
+      <option value="type">Sort by type</option>
+    </select>
+    <div class="small" style="margin-top:8px">Tip: include/exclude supports multiple terms and quoted phrases.</div>
+  </div>
+
+  <div class="section">
+    <h3>Actions</h3>
+    <div class="row3">
+      <button class="secondary" id="fullscreenBtn">Fullscreen</button>
+      <button class="secondary" id="miniBtn">Minimap</button>
+      <button class="secondary" id="relayoutBtn">Layout</button>
+    </div>
+    <div style="height:8px"></div>
+    <div class="row3">
+      <button class="secondary" id="showAllBtn">Show all</button>
+      <button class="secondary" id="exportBtn">Export state</button>
+      <button class="secondary" id="exportJsonBtn">Export JSON</button>
+      <button class="secondary" id="exportCsvBtn">Export CSV</button>
+      <button class="secondary" id="copyBtn" disabled>Copy selected</button>
+    </div>
+    <div style="height:8px"></div>
+    <button class="secondary" id="helpBtn" style="width:100%">? Keyboard Shortcuts</button>
+    <div class="topline">Right-click a node for hide / isolate / neighbor-only actions.</div>
+  </div>
+
+  <div class="section">
+    <h3>Legend</h3>
+    <div class="legend-item"><span class="swatch sw-html"></span> HTML / page</div>
+    <div class="legend-item"><span class="swatch sw-css"></span> CSS</div>
+    <div class="legend-item"><span class="swatch sw-js"></span> JS / TS</div>
+    <div class="legend-item"><span class="swatch sw-dead"></span> Dead link</div>
+    <div class="legend-item"><span class="swatch sw-dyn"></span> Dynamic link</div>
+    <div class="legend-item"><span class="swatch sw-ext"></span> External link</div>
+    <div class="legend-item"><span class="swatch sw-pop"></span> Popular (from logs)</div>
+  </div>
+
+  <div class="section">
+    <h3>Stats</h3>
+    <div class="statcard">
+      <div class="stat"><div class="big" id="statNodes">0</div><div class="small">Nodes</div></div>
+      <div class="stat"><div class="big" id="statEdges">0</div><div class="small">Edges</div></div>
+      <div class="stat"><div class="big" id="statDead">0</div><div class="small">Dead links</div></div>
+      <div class="stat"><div class="big" id="statPopular">0</div><div class="small">Popular nodes</div></div>
+      <div class="stat"><div class="big" id="statOrphans">0</div><div class="small">Orphans</div></div>
+      <div class="stat"><div class="big" id="statHubs">0</div><div class="small">Hubs</div></div>
+      <div class="stat"><div class="big" id="statAvgDegree">0</div><div class="small">Avg degree</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Top nodes</h3>
+    <div id="topNodes" class="listbox"></div>
+  </div>
+
+  <div class="section">
+    <h3>Top folders</h3>
+    <div id="topFolders" class="listbox"></div>
+  </div>
+
+  <div class="section">
+    <h3>Selected</h3>
+    <div id="selectedInfo" class="details"><div class="small">Nothing selected.</div></div>
+  </div>
+</aside>
+
+<main id="main" role="main">
+  <div class="pillbar">
+    <div class="pill">Drag to pan</div>
+    <div class="pill">Scroll to zoom</div>
+    <div class="pill">Click to select</div>
+    <div class="pill">Double click to focus</div>
+  </div>
+  <div id="network"></div>
+  <div id="miniWrap">
+    <div id="miniHead">Minimap</div>
+    <div id="minimap"></div>
+  </div>
+</main>
+
+<div id="contextMenu" role="menu" aria-label="Node context menu">
+  <button id="ctxFocus">Focus node</button>
+  <button id="ctxNeighbors">Show node + neighbors</button>
+  <button id="ctxHide">Hide node</button>
+  <button id="ctxShowAll">Show all</button>
+</div>
+
+<div id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div id="helpContent">
+    <h2 id="helpTitle">Keyboard Shortcuts</h2>
+    <div class="shortcut">
+      <span>Escape</span>
+      <span class="key">ESC</span>
+    </div>
+    <div class="shortcut">
+      <span>Toggle sidebar (mobile)</span>
+      <span class="key">M</span>
+    </div>
+    <div class="shortcut">
+      <span>Toggle minimap</span>
+      <span class="key">Shift + M</span>
+    </div>
+    <div class="shortcut">
+      <span>Fit graph</span>
+      <span class="key">F</span>
+    </div>
+    <div class="shortcut">
+      <span>Fullscreen</span>
+      <span class="key">Shift + F</span>
+    </div>
+    <div class="shortcut">
+      <span>Apply filters</span>
+      <span class="key">Enter</span>
+    </div>
+    <div class="shortcut">
+      <span>Reset all</span>
+      <span class="key">Shift + R</span>
+    </div>
+    <div class="shortcut">
+      <span>Help</span>
+      <span class="key">?</span>
+    </div>
+    <br />
+    <p style="font-size: 12px; color: var(--muted);">
+      <strong>Node selection:</strong> Click to select, Double-click to focus, Right-click for context menu.
+    </p>
+  </div>
+</div>
+
+<script id="payload" data-payload="eyJub2RlcyI6W3siaWQiOiJncmFwaF9pbXByb3ZlZF9weSIsImxhYmVsIjoiZ3JhcGhfaW1wcm92ZWQucHkiLCJncm91cCI6Ii4iLCJraW5kIjoicHkiLCJzaXplIjo2ODUzOSwiY29sb3IiOiIjNThhNmZmIiwiZGVncmVlIjoxOCwicG9wdWxhcml0eSI6MCwiZGVhZCI6ZmFsc2UsImR5bmFtaWMiOmZhbHNlLCJleHRlcm5hbCI6ZmFsc2UsInZhbHVlIjo0MiwidGl0bGUiOiI8Yj5ncmFwaF9pbXByb3ZlZC5weTwvYj48YnI+dHlwZTogcHk8YnI+Zm9sZGVyOiAuPGJyPmRlZ3JlZTogMTg8YnI+cG9wdWxhcml0eTogMDxicj5zaXplOiA2ODUzOSBieXRlcyJ9LHsiaWQiOiJ3aWR0aF9kZXZpY2Utd2lkdGhfX2luaXRpYWwtc2NhbGVfMV9fbWF4aW11bS1zY2FsZV81IiwibGFiZWwiOiJ3aWR0aD1kZXZpY2Utd2lkdGgsIGluaXRpYWwtc2NhbGU9MSwgbWF4aW11bS1zY2FsZT01IiwiZ3JvdXAiOiIuIiwia2luZCI6Im90aGVyIiwic2l6ZSI6MCwiY29sb3IiOiIjZjg1MTQ5IiwiZGVncmVlIjoxLCJwb3B1bGFyaXR5IjowLCJkZWFkIjp0cnVlLCJkeW5hbWljIjpmYWxzZSwiZXh0ZXJuYWwiOmZhbHNlLCJ2YWx1ZSI6OCwidGl0bGUiOiI8Yj53aWR0aD1kZXZpY2Utd2lkdGgsIGluaXRpYWwtc2NhbGU9MSwgbWF4aW11bS1zY2FsZT01PC9iPjxicj50eXBlOiBvdGhlcjxicj5mb2xkZXI6IC48YnI+ZGVncmVlOiAxPGJyPnBvcHVsYXJpdHk6IDA8YnI+c2l6ZTogMCBieXRlczxicj48Yj5kZWFkIC8gbWlzc2luZzwvYj4ifSx7ImlkIjoic3RvcmVfdHJ1ZSIsImxhYmVsIjoic3RvcmVfdHJ1ZSIsImdyb3VwIjoiLiIsImtpbmQiOiJvdGhlciIsInNpemUiOjAsImNvbG9yIjoiI2Y4NTE0OSIsImRlZ3JlZSI6NSwicG9wdWxhcml0eSI6MCwiZGVhZCI6dHJ1ZSwiZHluYW1pYyI6ZmFsc2UsImV4dGVybmFsIjpmYWxzZSwidmFsdWUiOjE2LCJ0aXRsZSI6IjxiPnN0b3JlX3RydWU8L2I+PGJyPnR5cGU6IG90aGVyPGJyPmZvbGRlcjogLjxicj5kZWdyZWU6IDU8YnI+cG9wdWxhcml0eTogMDxicj5zaXplOiAwIGJ5dGVzPGJyPjxiPmRlYWQgLyBtaXNzaW5nPC9iPiJ9LHsiaWQiOiJhcHBlbmQiLCJsYWJlbCI6ImFwcGVuZCIsImdyb3VwIjoiLiIsImtpbmQiOiJvdGhlciIsInNpemUiOjAsImNvbG9yIjoiI2Y4NTE0OSIsImRlZ3JlZSI6MywicG9wdWxhcml0eSI6MCwiZGVhZCI6dHJ1ZSwiZHluYW1pYyI6ZmFsc2UsImV4dGVybmFsIjpmYWxzZSwidmFsdWUiOjEyLCJ0aXRsZSI6IjxiPmFwcGVuZDwvYj48YnI+dHlwZTogb3RoZXI8YnI+Zm9sZGVyOiAuPGJyPmRlZ3JlZTogMzxicj5wb3B1bGFyaXR5OiAwPGJyPnNpemU6IDAgYnl0ZXM8YnI+PGI+ZGVhZCAvIG1pc3Npbmc8L2I+In0seyJpZCI6ImJsb2IiLCJsYWJlbCI6ImJsb2IiLCJncm91cCI6Ii4iLCJraW5kIjoib3RoZXIiLCJzaXplIjowLCJjb2xvciI6IiNmODUxNDkiLCJkZWdyZWUiOjMsInBvcHVsYXJpdHkiOjAsImRlYWQiOnRydWUsImR5bmFtaWMiOmZhbHNlLCJleHRlcm5hbCI6ZmFsc2UsInZhbHVlIjoxMiwidGl0bGUiOiI8Yj5ibG9iPC9iPjxicj50eXBlOiBvdGhlcjxicj5mb2xkZXI6IC48YnI+ZGVncmVlOiAzPGJyPnBvcHVsYXJpdHk6IDA8YnI+c2l6ZTogMCBieXRlczxicj48Yj5kZWFkIC8gbWlzc2luZzwvYj4ifSx7ImlkIjoiYV9ocmVmIiwibGFiZWwiOiJhLmhyZWYiLCJncm91cCI6Ii4iLCJraW5kIjoiaHJlZiIsInNpemUiOjAsImNvbG9yIjoiI2Y4NTE0OSIsImRlZ3JlZSI6MywicG9wdWxhcml0eSI6MCwiZGVhZCI6dHJ1ZSwiZHluYW1pYyI6ZmFsc2UsImV4dGVybmFsIjpmYWxzZSwidmFsdWUiOjEyLCJ0aXRsZSI6IjxiPmEuaHJlZjwvYj48YnI+dHlwZTogaHJlZjxicj5mb2xkZXI6IC48YnI+ZGVncmVlOiAzPGJyPnBvcHVsYXJpdHk6IDA8YnI+c2l6ZTogMCBieXRlczxicj48Yj5kZWFkIC8gbWlzc2luZzwvYj4ifSx7ImlkIjoiX19zcmNfaWRfIiwibGFiZWwiOiI6IHNyY19pZCwiLCJncm91cCI6Ii4iLCJraW5kIjoib3RoZXIiLCJzaXplIjowLCJjb2xvciI6IiNmODUxNDkiLCJkZWdyZWUiOjMsInBvcHVsYXJpdHkiOjAsImRlYWQiOnRydWUsImR5bmFtaWMiOmZhbHNlLCJleHRlcm5hbCI6ZmFsc2UsInZhbHVlIjoxMiwidGl0bGUiOiI8Yj46IHNyY19pZCw8L2I+PGJyPnR5cGU6IG90aGVyPGJyPmZvbGRlcjogLjxicj5kZWdyZWU6IDM8YnI+cG9wdWxhcml0eTogMDxicj5zaXplOiAwIGJ5dGVzPGJyPjxiPmRlYWQgLyBtaXNzaW5nPC9iPiJ9LHsiaWQiOiJSRUFETUVfbWQiLCJsYWJlbCI6IlJFQURNRS5tZCIsImdyb3VwIjoiLiIsImtpbmQiOiJtZCIsInNpemUiOjIwODI2LCJjb2xvciI6IiM4Yjk0OWUiLCJkZWdyZWUiOjEwLCJwb3B1bGFyaXR5IjowLCJkZWFkIjpmYWxzZSwiZHluYW1pYyI6ZmFsc2UsImV4dGVybmFsIjpmYWxzZSwidmFsdWUiOjI2LCJ0aXRsZSI6IjxiPlJFQURNRS5tZDwvYj48YnI+dHlwZTogbWQ8YnI+Zm9sZGVyOiAuPGJyPmRlZ3JlZTogMTA8YnI+cG9wdWxhcml0eTogMDxicj5zaXplOiAyMDgyNiBieXRlcyJ9LHsiaWQiOiJfcGF0aF90b19wYWdlIiwibGFiZWwiOiIvcGF0aC90by9wYWdlIiwiZ3JvdXAiOiJwYXRoL3RvIiwia2luZCI6Im90aGVyIiwic2l6ZSI6MCwiY29sb3IiOiIjZjg1MTQ5IiwiZGVncmVlIjoxLCJwb3B1bGFyaXR5IjowLCJkZWFkIjp0cnVlLCJkeW5hbWljIjpmYWxzZSwiZXh0ZXJuYWwiOmZhbHNlLCJ2YWx1ZSI6OCwidGl0bGUiOiI8Yj4vcGF0aC90by9wYWdlPC9iPjxicj50eXBlOiBvdGhlcjxicj5mb2xkZXI6IHBhdGgvdG88YnI+ZGVncmVlOiAxPGJyPnBvcHVsYXJpdHk6IDA8YnI+c2l6ZTogMCBieXRlczxicj48Yj5kZWFkIC8gbWlzc2luZzwvYj4ifSx7ImlkIjoic3R5bGVfY3NzIiwibGFiZWwiOiJzdHlsZS5jc3MiLCJncm91cCI6Ii4iLCJraW5kIjoiY3NzIiwic2l6ZSI6MCwiY29sb3IiOiIjZjg1MTQ5IiwiZGVncmVlIjoxLCJwb3B1bGFyaXR5IjowLCJkZWFkIjp0cnVlLCJkeW5hbWljIjpmYWxzZSwiZXh0ZXJuYWwiOmZhbHNlLCJ2YWx1ZSI6OCwidGl0bGUiOiI8Yj5zdHlsZS5jc3M8L2I+PGJyPnR5cGU6IGNzczxicj5mb2xkZXI6IC48YnI+ZGVncmVlOiAxPGJyPnBvcHVsYXJpdHk6IDA8YnI+c2l6ZTogMCBieXRlczxicj48Yj5kZWFkIC8gbWlzc2luZzwvYj4ifSx7ImlkIjoic2NyaXB0X2pzIiwibGFiZWwiOiJzY3JpcHQuanMiLCJncm91cCI6Ii4iLCJraW5kIjoianMiLCJzaXplIjowLCJjb2xvciI6IiNmODUxNDkiLCJkZWdyZWUiOjEsInBvcHVsYXJpdHkiOjAsImRlYWQiOnRydWUsImR5bmFtaWMiOmZhbHNlLCJleHRlcm5hbCI6ZmFsc2UsInZhbHVlIjo4LCJ0aXRsZSI6IjxiPnNjcmlwdC5qczwvYj48YnI+dHlwZToganM8YnI+Zm9sZGVyOiAuPGJyPmRlZ3JlZTogMTxicj5wb3B1bGFyaXR5OiAwPGJyPnNpemU6IDAgYnl0ZXM8YnI+PGI+ZGVhZCAvIG1pc3Npbmc8L2I+In0seyJpZCI6ImltYWdlX3BuZyIsImxhYmVsIjoiaW1hZ2UucG5nIiwiZ3JvdXAiOiIuIiwia2luZCI6InBuZyIsInNpemUiOjAsImNvbG9yIjoiI2Y4NTE0OSIsImRlZ3JlZSI6MiwicG9wdWxhcml0eSI6MCwiZGVhZCI6dHJ1ZSwiZHluYW1pYyI6ZmFsc2UsImV4dGVybmFsIjpmYWxzZSwidmFsdWUiOjEwLCJ0aXRsZSI6IjxiPmltYWdlLnBuZzwvYj48YnI+dHlwZTogcG5nPGJyPmZvbGRlcjogLjxicj5kZWdyZWU6IDI8YnI+cG9wdWxhcml0eTogMDxicj5zaXplOiAwIGJ5dGVzPGJyPjxiPmRlYWQgLyBtaXNzaW5nPC9iPiJ9LHsiaWQiOiJfc3VibWl0IiwibGFiZWwiOiIvc3VibWl0IiwiZ3JvdXAiOiIuIiwia2luZCI6Im90aGVyIiwic2l6ZSI6MCwiY29sb3IiOiIjZjg1MTQ5IiwiZGVncmVlIjoxLCJwb3B1bGFyaXR5IjowLCJkZWFkIjp0cnVlLCJkeW5hbWljIjpmYWxzZSwiZXh0ZXJuYWwiOmZhbHNlLCJ2YWx1ZSI6OCwidGl0bGUiOiI8Yj4vc3VibWl0PC9iPjxicj50eXBlOiBvdGhlcjxicj5mb2xkZXI6IC48YnI+ZGVncmVlOiAxPGJyPnBvcHVsYXJpdHk6IDA8YnI+c2l6ZTogMCBieXRlczxicj48Yj5kZWFkIC8gbWlzc2luZzwvYj4ifSx7ImlkIjoib3RoZXJfY3NzIiwibGFiZWwiOiJvdGhlci5jc3MiLCJncm91cCI6Ii4iLCJraW5kIjoiY3NzIiwic2l6ZSI6MCwiY29sb3IiOiIjZjg1MTQ5IiwiZGVncmVlIjoxLCJwb3B1bGFyaXR5IjowLCJkZWFkIjp0cnVlLCJkeW5hbWljIjpmYWxzZSwiZXh0ZXJuYWwiOmZhbHNlLCJ2YWx1ZSI6OCwidGl0bGUiOiI8Yj5vdGhlci5jc3M8L2I+PGJyPnR5cGU6IGNzczxicj5mb2xkZXI6IC48YnI+ZGVncmVlOiAxPGJyPnBvcHVsYXJpdHk6IDA8YnI+c2l6ZTogMCBieXRlczxicj48Yj5kZWFkIC8gbWlzc2luZzwvYj4ifSx7ImlkIjoiX19jb21wb25lbnRfanMiLCJsYWJlbCI6Ii4vY29tcG9uZW50LmpzIiwiZ3JvdXAiOiIuIiwia2luZCI6ImpzIiwic2l6ZSI6MCwiY29sb3IiOiIjZjg1MTQ5IiwiZGVncmVlIjoxLCJwb3B1bGFyaXR5IjowLCJkZWFkIjp0cnVlLCJkeW5hbWljIjpmYWxzZSwiZXh0ZXJuYWwiOmZhbHNlLCJ2YWx1ZSI6OCwidGl0bGUiOiI8Yj4uL2NvbXBvbmVudC5qczwvYj48YnI+dHlwZToganM8YnI+Zm9sZGVyOiAuPGJyPmRlZ3JlZTogMTxicj5wb3B1bGFyaXR5OiAwPGJyPnNpemU6IDAgYnl0ZXM8YnI+PGI+ZGVhZCAvIG1pc3Npbmc8L2I+In0seyJpZCI6Il9fbW9kdWxlX2pzIiwibGFiZWwiOiIuL21vZHVsZS5qcyIsImdyb3VwIjoiLiIsImtpbmQiOiJqcyIsInNpemUiOjAsImNvbG9yIjoiI2Y4NTE0OSIsImRlZ3JlZSI6MSwicG9wdWxhcml0eSI6MCwiZGVhZCI6dHJ1ZSwiZHluYW1pYyI6ZmFsc2UsImV4dGVybmFsIjpmYWxzZSwidmFsdWUiOjgsInRpdGxlIjoiPGI+Li9tb2R1bGUuanM8L2I+PGJyPnR5cGU6IGpzPGJyPmZvbGRlcjogLjxicj5kZWdyZWU6IDE8YnI+cG9wdWxhcml0eTogMDxicj5zaXplOiAwIGJ5dGVzPGJyPjxiPmRlYWQgLyBtaXNzaW5nPC9iPiJ9LHsiaWQiOiJfX2RhdGFfanNvbiIsImxhYmVsIjoiLi9kYXRhLmpzb24iLCJncm91cCI6Ii4iLCJraW5kIjoianNvbiIsInNpemUiOjAsImNvbG9yIjoiI2Y4NTE0OSIsImRlZ3JlZSI6MSwicG9wdWxhcml0eSI6MCwiZGVhZCI6dHJ1ZSwiZHluYW1pYyI6ZmFsc2UsImV4dGVybmFsIjpmYWxzZSwidmFsdWUiOjgsInRpdGxlIjoiPGI+Li9kYXRhLmpzb248L2I+PGJyPnR5cGU6IGpzb248YnI+Zm9sZGVyOiAuPGJyPmRlZ3JlZTogMTxicj5wb3B1bGFyaXR5OiAwPGJyPnNpemU6IDAgYnl0ZXM8YnI+PGI+ZGVhZCAvIG1pc3Npbmc8L2I+In0seyJpZCI6InBhdGhfdG9feW91cl9maWxlX3B5IiwibGFiZWwiOiJwYXRoL3RvL3lvdXIvZmlsZS5weSIsImdyb3VwIjoicGF0aC90by95b3VyIiwia2luZCI6InB5Iiwic2l6ZSI6MjExLCJjb2xvciI6IiM1OGE2ZmYiLCJkZWdyZWUiOjAsInBvcHVsYXJpdHkiOjAsImRlYWQiOmZhbHNlLCJkeW5hbWljIjpmYWxzZSwiZXh0ZXJuYWwiOmZhbHNlLCJ2YWx1ZSI6NiwidGl0bGUiOiI8Yj5wYXRoL3RvL3lvdXIvZmlsZS5weTwvYj48YnI+dHlwZTogcHk8YnI+Zm9sZGVyOiBwYXRoL3RvL3lvdXI8YnI+ZGVncmVlOiAwPGJyPnBvcHVsYXJpdHk6IDA8YnI+c2l6ZTogMjExIGJ5dGVzIn1dLCJlZGdlcyI6W3siaWQiOiJlMCIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoid2lkdGhfZGV2aWNlLXdpZHRoX19pbml0aWFsLXNjYWxlXzFfX21heGltdW0tc2NhbGVfNSIsImxhYmVsIjoid2lkdGg9ZGV2aWNlLXdpZHRoLCBpbml0aWFsLXNjYWxlPTEsIG1heGltdW0tc2NhbGU9NSIsImNvbG9yIjoiI2Y4NTE0OSIsImRhc2hlcyI6dHJ1ZSwiYXJyb3dzIjoidG8iLCJkeW5hbWljIjpmYWxzZSwidGl0bGUiOiJMaW5rOiB3aWR0aD1kZXZpY2Utd2lkdGgsIGluaXRpYWwtc2NhbGU9MSwgbWF4aW11bS1zY2FsZT01In0seyJpZCI6ImUxIiwiZnJvbSI6ImdyYXBoX2ltcHJvdmVkX3B5IiwidG8iOiJzdG9yZV90cnVlIiwibGFiZWwiOiJzdG9yZV90cnVlIiwiY29sb3IiOiIjZjg1MTQ5IiwiZGFzaGVzIjp0cnVlLCJhcnJvd3MiOiJ0byIsImR5bmFtaWMiOmZhbHNlLCJ0aXRsZSI6Ikxpbms6IHN0b3JlX3RydWUifSx7ImlkIjoiZTIiLCJmcm9tIjoiZ3JhcGhfaW1wcm92ZWRfcHkiLCJ0byI6InN0b3JlX3RydWUiLCJsYWJlbCI6InN0b3JlX3RydWUiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogc3RvcmVfdHJ1ZSJ9LHsiaWQiOiJlMyIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoic3RvcmVfdHJ1ZSIsImxhYmVsIjoic3RvcmVfdHJ1ZSIsImNvbG9yIjoiI2Y4NTE0OSIsImRhc2hlcyI6dHJ1ZSwiYXJyb3dzIjoidG8iLCJkeW5hbWljIjpmYWxzZSwidGl0bGUiOiJMaW5rOiBzdG9yZV90cnVlIn0seyJpZCI6ImU0IiwiZnJvbSI6ImdyYXBoX2ltcHJvdmVkX3B5IiwidG8iOiJhcHBlbmQiLCJsYWJlbCI6ImFwcGVuZCIsImNvbG9yIjoiI2Y4NTE0OSIsImRhc2hlcyI6dHJ1ZSwiYXJyb3dzIjoidG8iLCJkeW5hbWljIjpmYWxzZSwidGl0bGUiOiJMaW5rOiBhcHBlbmQifSx7ImlkIjoiZTUiLCJmcm9tIjoiZ3JhcGhfaW1wcm92ZWRfcHkiLCJ0byI6ImFwcGVuZCIsImxhYmVsIjoiYXBwZW5kIiwiY29sb3IiOiIjZjg1MTQ5IiwiZGFzaGVzIjp0cnVlLCJhcnJvd3MiOiJ0byIsImR5bmFtaWMiOmZhbHNlLCJ0aXRsZSI6Ikxpbms6IGFwcGVuZCJ9LHsiaWQiOiJlNiIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiYXBwZW5kIiwibGFiZWwiOiJhcHBlbmQiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogYXBwZW5kIn0seyJpZCI6ImU3IiwiZnJvbSI6ImdyYXBoX2ltcHJvdmVkX3B5IiwidG8iOiJzdG9yZV90cnVlIiwibGFiZWwiOiJzdG9yZV90cnVlIiwiY29sb3IiOiIjZjg1MTQ5IiwiZGFzaGVzIjp0cnVlLCJhcnJvd3MiOiJ0byIsImR5bmFtaWMiOmZhbHNlLCJ0aXRsZSI6Ikxpbms6IHN0b3JlX3RydWUifSx7ImlkIjoiZTgiLCJmcm9tIjoiZ3JhcGhfaW1wcm92ZWRfcHkiLCJ0byI6InN0b3JlX3RydWUiLCJsYWJlbCI6InN0b3JlX3RydWUiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogc3RvcmVfdHJ1ZSJ9LHsiaWQiOiJlOSIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiYmxvYiIsImxhYmVsIjoiYmxvYiIsImNvbG9yIjoiI2Y4NTE0OSIsImRhc2hlcyI6dHJ1ZSwiYXJyb3dzIjoidG8iLCJkeW5hbWljIjpmYWxzZSwidGl0bGUiOiJMaW5rOiBibG9iIn0seyJpZCI6ImUxMCIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiYV9ocmVmIiwibGFiZWwiOiJhLmhyZWYiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogYS5ocmVmIn0seyJpZCI6ImUxMSIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiYmxvYiIsImxhYmVsIjoiYmxvYiIsImNvbG9yIjoiI2Y4NTE0OSIsImRhc2hlcyI6dHJ1ZSwiYXJyb3dzIjoidG8iLCJkeW5hbWljIjpmYWxzZSwidGl0bGUiOiJMaW5rOiBibG9iIn0seyJpZCI6ImUxMiIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiYV9ocmVmIiwibGFiZWwiOiJhLmhyZWYiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogYS5ocmVmIn0seyJpZCI6ImUxMyIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiYmxvYiIsImxhYmVsIjoiYmxvYiIsImNvbG9yIjoiI2Y4NTE0OSIsImRhc2hlcyI6dHJ1ZSwiYXJyb3dzIjoidG8iLCJkeW5hbWljIjpmYWxzZSwidGl0bGUiOiJMaW5rOiBibG9iIn0seyJpZCI6ImUxNCIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiYV9ocmVmIiwibGFiZWwiOiJhLmhyZWYiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogYS5ocmVmIn0seyJpZCI6ImUxNSIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiX19zcmNfaWRfIiwibGFiZWwiOiI6IHNyY19pZCwiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogOiBzcmNfaWQsIn0seyJpZCI6ImUxNiIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiX19zcmNfaWRfIiwibGFiZWwiOiI6IHNyY19pZCwiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogOiBzcmNfaWQsIn0seyJpZCI6ImUxNyIsImZyb20iOiJncmFwaF9pbXByb3ZlZF9weSIsInRvIjoiX19zcmNfaWRfIiwibGFiZWwiOiI6IHNyY19pZCwiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogOiBzcmNfaWQsIn0seyJpZCI6ImUxOCIsImZyb20iOiJSRUFETUVfbWQiLCJ0byI6Il9wYXRoX3RvX3BhZ2UiLCJsYWJlbCI6Ii9wYXRoL3RvL3BhZ2UiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogL3BhdGgvdG8vcGFnZSJ9LHsiaWQiOiJlMTkiLCJmcm9tIjoiUkVBRE1FX21kIiwidG8iOiJzdHlsZV9jc3MiLCJsYWJlbCI6InN0eWxlLmNzcyIsImNvbG9yIjoiI2Y4NTE0OSIsImRhc2hlcyI6dHJ1ZSwiYXJyb3dzIjoidG8iLCJkeW5hbWljIjpmYWxzZSwidGl0bGUiOiJMaW5rOiBzdHlsZS5jc3MifSx7ImlkIjoiZTIwIiwiZnJvbSI6IlJFQURNRV9tZCIsInRvIjoic2NyaXB0X2pzIiwibGFiZWwiOiJzY3JpcHQuanMiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogc2NyaXB0LmpzIn0seyJpZCI6ImUyMSIsImZyb20iOiJSRUFETUVfbWQiLCJ0byI6ImltYWdlX3BuZyIsImxhYmVsIjoiaW1hZ2UucG5nIiwiY29sb3IiOiIjZjg1MTQ5IiwiZGFzaGVzIjp0cnVlLCJhcnJvd3MiOiJ0byIsImR5bmFtaWMiOmZhbHNlLCJ0aXRsZSI6Ikxpbms6IGltYWdlLnBuZyJ9LHsiaWQiOiJlMjIiLCJmcm9tIjoiUkVBRE1FX21kIiwidG8iOiJfc3VibWl0IiwibGFiZWwiOiIvc3VibWl0IiwiY29sb3IiOiIjZjg1MTQ5IiwiZGFzaGVzIjp0cnVlLCJhcnJvd3MiOiJ0byIsImR5bmFtaWMiOmZhbHNlLCJ0aXRsZSI6Ikxpbms6IC9zdWJtaXQifSx7ImlkIjoiZTIzIiwiZnJvbSI6IlJFQURNRV9tZCIsInRvIjoib3RoZXJfY3NzIiwibGFiZWwiOiJvdGhlci5jc3MiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogb3RoZXIuY3NzIn0seyJpZCI6ImUyNCIsImZyb20iOiJSRUFETUVfbWQiLCJ0byI6ImltYWdlX3BuZyIsImxhYmVsIjoiaW1hZ2UucG5nIiwiY29sb3IiOiIjZjg1MTQ5IiwiZGFzaGVzIjp0cnVlLCJhcnJvd3MiOiJ0byIsImR5bmFtaWMiOmZhbHNlLCJ0aXRsZSI6Ikxpbms6IGltYWdlLnBuZyJ9LHsiaWQiOiJlMjUiLCJmcm9tIjoiUkVBRE1FX21kIiwidG8iOiJfX2NvbXBvbmVudF9qcyIsImxhYmVsIjoiLi9jb21wb25lbnQuanMiLCJjb2xvciI6IiNmODUxNDkiLCJkYXNoZXMiOnRydWUsImFycm93cyI6InRvIiwiZHluYW1pYyI6ZmFsc2UsInRpdGxlIjoiTGluazogLi9jb21wb25lbnQuanMifSx7ImlkIjoiZTI2IiwiZnJvbSI6IlJFQURNRV9tZCIsInRvIjoiX19tb2R1bGVfanMiLCJsYWJlbCI6Ii4vbW9kdWxlLmpzIiwiY29sb3IiOiIjZjg1MTQ5IiwiZGFzaGVzIjp0cnVlLCJhcnJvd3MiOiJ0byIsImR5bmFtaWMiOmZhbHNlLCJ0aXRsZSI6Ikxpbms6IC4vbW9kdWxlLmpzIn0seyJpZCI6ImUyNyIsImZyb20iOiJSRUFETUVfbWQiLCJ0byI6Il9fZGF0YV9qc29uIiwibGFiZWwiOiIuL2RhdGEuanNvbiIsImNvbG9yIjoiI2Y4NTE0OSIsImRhc2hlcyI6dHJ1ZSwiYXJyb3dzIjoidG8iLCJkeW5hbWljIjpmYWxzZSwidGl0bGUiOiJMaW5rOiAuL2RhdGEuanNvbiJ9XSwibWV0YSI6eyJyb290IjoiL3dvcmtzcGFjZXMvbGluay1WSVN1YWxpemVyIiwiZmlsZUNvdW50IjozLCJzY2FuQnl0ZXMiOjg5NTc2LCJlZGdlQ291bnQiOjI4LCJub2RlQ291bnQiOjE4LCJkZWFkTGlua3MiOjI4LCJleHRlcm5hbExpbmtzIjoxLCJkeW5hbWljTGlua3MiOjAsInR5cGVzIjpbIm1kIiwicHkiXSwiZm9sZGVycyI6WyIuIiwicGF0aC90by95b3VyIl0sInBvcHVsYXJOb2RlcyI6MCwib3JwaGFuTm9kZXMiOjEsImh1Yk5vZGVzIjoyLCJhdmVyYWdlRGVncmVlIjozLjExLCJ0b3BOb2RlcyI6W3siaWQiOiJncmFwaF9pbXByb3ZlZF9weSIsImxhYmVsIjoiZ3JhcGhfaW1wcm92ZWQucHkiLCJkZWdyZWUiOjE4LCJwb3B1bGFyaXR5IjowLCJncm91cCI6Ii4ifSx7ImlkIjoiUkVBRE1FX21kIiwibGFiZWwiOiJSRUFETUUubWQiLCJkZWdyZWUiOjEwLCJwb3B1bGFyaXR5IjowLCJncm91cCI6Ii4ifSx7ImlkIjoic3RvcmVfdHJ1ZSIsImxhYmVsIjoic3RvcmVfdHJ1ZSIsImRlZ3JlZSI6NSwicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiIuIn0seyJpZCI6ImJsb2IiLCJsYWJlbCI6ImJsb2IiLCJkZWdyZWUiOjMsInBvcHVsYXJpdHkiOjAsImdyb3VwIjoiLiJ9LHsiaWQiOiJhcHBlbmQiLCJsYWJlbCI6ImFwcGVuZCIsImRlZ3JlZSI6MywicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiIuIn0seyJpZCI6ImFfaHJlZiIsImxhYmVsIjoiYS5ocmVmIiwiZGVncmVlIjozLCJwb3B1bGFyaXR5IjowLCJncm91cCI6Ii4ifSx7ImlkIjoiX19zcmNfaWRfIiwibGFiZWwiOiI6IHNyY19pZCwiLCJkZWdyZWUiOjMsInBvcHVsYXJpdHkiOjAsImdyb3VwIjoiLiJ9LHsiaWQiOiJpbWFnZV9wbmciLCJsYWJlbCI6ImltYWdlLnBuZyIsImRlZ3JlZSI6MiwicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiIuIn0seyJpZCI6IndpZHRoX2RldmljZS13aWR0aF9faW5pdGlhbC1zY2FsZV8xX19tYXhpbXVtLXNjYWxlXzUiLCJsYWJlbCI6IndpZHRoPWRldmljZS13aWR0aCwgaW5pdGlhbC1zY2FsZT0xLCBtYXhpbXVtLXNjYWxlPTUiLCJkZWdyZWUiOjEsInBvcHVsYXJpdHkiOjAsImdyb3VwIjoiLiJ9LHsiaWQiOiJzdHlsZV9jc3MiLCJsYWJlbCI6InN0eWxlLmNzcyIsImRlZ3JlZSI6MSwicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiIuIn0seyJpZCI6InNjcmlwdF9qcyIsImxhYmVsIjoic2NyaXB0LmpzIiwiZGVncmVlIjoxLCJwb3B1bGFyaXR5IjowLCJncm91cCI6Ii4ifSx7ImlkIjoib3RoZXJfY3NzIiwibGFiZWwiOiJvdGhlci5jc3MiLCJkZWdyZWUiOjEsInBvcHVsYXJpdHkiOjAsImdyb3VwIjoiLiJ9LHsiaWQiOiJfc3VibWl0IiwibGFiZWwiOiIvc3VibWl0IiwiZGVncmVlIjoxLCJwb3B1bGFyaXR5IjowLCJncm91cCI6Ii4ifSx7ImlkIjoiX3BhdGhfdG9fcGFnZSIsImxhYmVsIjoiL3BhdGgvdG8vcGFnZSIsImRlZ3JlZSI6MSwicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiJwYXRoL3RvIn0seyJpZCI6Il9fbW9kdWxlX2pzIiwibGFiZWwiOiIuL21vZHVsZS5qcyIsImRlZ3JlZSI6MSwicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiIuIn0seyJpZCI6Il9fZGF0YV9qc29uIiwibGFiZWwiOiIuL2RhdGEuanNvbiIsImRlZ3JlZSI6MSwicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiIuIn0seyJpZCI6Il9fY29tcG9uZW50X2pzIiwibGFiZWwiOiIuL2NvbXBvbmVudC5qcyIsImRlZ3JlZSI6MSwicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiIuIn0seyJpZCI6InBhdGhfdG9feW91cl9maWxlX3B5IiwibGFiZWwiOiJwYXRoL3RvL3lvdXIvZmlsZS5weSIsImRlZ3JlZSI6MCwicG9wdWxhcml0eSI6MCwiZ3JvdXAiOiJwYXRoL3RvL3lvdXIifV0sInRvcEZvbGRlcnMiOlt7ImxhYmVsIjoiLiIsImNvdW50IjoxNn0seyJsYWJlbCI6InBhdGgvdG8veW91ciIsImNvdW50IjoxfV19fQ=="></script>
+<script>
+const raw = document.getElementById('payload').dataset.payload.trim();
+const data = JSON.parse(atob(raw));
+const nodes = new vis.DataSet(data.nodes);
+const edges = new vis.DataSet(data.edges);
+const meta = data.meta;
+const state = {
+  hidden: new Set(),
+  isolateNode: null,
+  selectedNode: null,
+  miniVisible: false,
+  sidebarOpen: false,
+  nodeIdFromUrl: null,
+};
+
+// Parse URL anchor for deep linking
+function parseUrlAnchor() {
+  const hash = window.location.hash.slice(1);
+  if (hash) {
+    state.nodeIdFromUrl = decodeURIComponent(hash);
+  }
+}
+
+const mainNetwork = new vis.Network(
+  document.getElementById('network'),
+  { nodes, edges },
+  {
+    autoResize: true,
+    interaction: { hover: true, hoverConnectedEdges: true, navigationButtons: true, keyboard: true, multiselect: true },
+    physics: { enabled: true, stabilization: { iterations: 140, fit: true }, barnesHut: { gravitationalConstant: -22000, springLength: 130, springConstant: 0.03, damping: 0.32 } },
+    layout: { improvedLayout: true },
+    nodes: { shape: 'dot', font: { color: '#e6edf3', size: 13 }, borderWidth: 2, scaling: { min: 6, max: 42 } },
+    edges: { smooth: { type: 'dynamic' }, arrows: { to: { enabled: true, scaleFactor: 0.4 } } }
+  }
+);
+
+const miniNetwork = new vis.Network(
+  document.getElementById('minimap'),
+  { nodes, edges },
+  {
+    autoResize: true,
+    interaction: { dragView: false, zoomView: false, selectable: false },
+    physics: false,
+    nodes: { shape: 'dot', font: { size: 0 }, scaling: { min: 2, max: 8 }, borderWidth: 1 },
+    edges: { smooth: false, arrows: { to: { enabled: false } } }
+  }
+);
+
+mainNetwork.once('stabilizationIterationsDone', () => mainNetwork.setOptions({ physics: false }));
+
+function esc(s) {
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function ext(name) {
+  const i = name.lastIndexOf('.');
+  return i >= 0 ? name.slice(i + 1).toLowerCase() : 'other';
+}
+
+function kindGroup(label) {
+  const e = ext(label);
+  if (['html','htm','twig','php','phtml'].includes(e)) return 'html';
+  if (['js','mjs','ts','tsx'].includes(e)) return 'js';
+  if (['css','scss','sass','less'].includes(e)) return 'css';
+  if (['json','md','xml'].includes(e)) return e;
+  return 'other';
+}
+
+function termsFrom(text) {
+  const raw = (text || '').trim();
+  if (!raw) return [];
+  const out = [];
+  let buf = '';
+  let quote = null;
+  for (const ch of raw) {
+    if ((ch === '"' || ch === "'") && (!quote || quote === ch)) {
+      quote = quote ? null : ch;
+      continue;
+    }
+    if (/\s/.test(ch) && !quote) {
+      if (buf.trim()) out.push(buf.trim());
+      buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out;
+}
+
+function textForNode(n) {
+  return [n.label, n.group, n.kind].filter(Boolean).join(' ').toLowerCase();
+}
+
+function buildSelectOptions(select, values, allLabel) {
+  select.innerHTML = '';
+  const all = document.createElement('option');
+  all.value = 'all';
+  all.textContent = allLabel;
+  select.appendChild(all);
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    select.appendChild(opt);
+  });
+}
+
+function renderMetaLists() {
+  buildSelectOptions(document.getElementById('typeFilter'), meta.types || [], 'All types');
+  buildSelectOptions(document.getElementById('folderFilter'), meta.folders || [], 'All folders');
+  document.getElementById('statNodes').textContent = meta.nodeCount || 0;
+  document.getElementById('statEdges').textContent = meta.edgeCount || 0;
+  document.getElementById('statDead').textContent = meta.deadLinks || 0;
+  document.getElementById('statPopular').textContent = meta.popularNodes || 0;
+  document.getElementById('statOrphans').textContent = meta.orphanNodes || 0;
+  document.getElementById('statHubs').textContent = meta.hubNodes || 0;
+  document.getElementById('statAvgDegree').textContent = meta.averageDegree || 0;
+  const topNodes = (meta.topNodes || []).slice(0, 25);
+  const topFolders = (meta.topFolders || []).slice(0, 25);
+  document.getElementById('topNodes').innerHTML = topNodes.map(n => `
+    <div class="listItem" data-id="${esc(n.id)}">
+      <div style="font-weight:700;color:#e6edf3">${esc(n.label)}</div>
+      <div class="small">degree ${n.degree || 0} · pop ${n.popularity || 0}</div>
+    </div>`).join('');
+  document.getElementById('topFolders').innerHTML = topFolders.map(f => `
+    <div class="listItem">
+      <div style="font-weight:700;color:#e6edf3">${esc(f.label)}</div>
+      <div class="small">${f.count || 0} files</div>
+    </div>`).join('');
+  document.querySelectorAll('#topNodes .listItem').forEach(el => {
+    el.addEventListener('click', () => focusNode(el.dataset.id));
+  });
+}
+
+function applyChip(chipId, checkboxId) {
+  const chip = document.getElementById(chipId);
+  const cb = document.getElementById(checkboxId);
+  function sync() { chip.classList.toggle('on', cb.checked); }
+  cb.addEventListener('change', sync);
+  chip.addEventListener('click', () => { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); applyFilters(); });
+  sync();
+}
+
+function nodeMatchesSearch(node, includeTerms, excludeTerms, mode, caseSensitive) {
+  let hay = textForNode(node);
+  if (caseSensitive) {
+    const include = includeTerms;
+    const exclude = excludeTerms;
+    if (exclude.some(t => hay.includes(t))) return false;
+    if (!include.length) return true;
+    if (mode === 'all') return include.every(t => hay.includes(t));
+    if (mode === 'any') return include.some(t => hay.includes(t));
+    if (mode === 'none') return !include.some(t => hay.includes(t));
+    return true;
+  } else {
+    hay = hay.toLowerCase();
+    const include = includeTerms.map(t => t.toLowerCase());
+    const exclude = excludeTerms.map(t => t.toLowerCase());
+    if (exclude.some(t => hay.includes(t))) return false;
+    if (!include.length) return true;
+    if (mode === 'all') return include.every(t => hay.includes(t));
+    if (mode === 'any') return include.some(t => hay.includes(t));
+    if (mode === 'none') return !include.some(t => hay.includes(t));
+    return true;
+  }
+}
+
+function applyFilters() {
+  const includeTerms = termsFrom(document.getElementById('include').value);
+  const excludeTerms = termsFrom(document.getElementById('exclude').value);
+  const mode = document.getElementById('matchMode').value;
+  const invert = document.getElementById('invert').checked;
+  const caseSensitive = document.getElementById('caseSensitive').checked;
+  const typeFilter = document.getElementById('typeFilter').value;
+  const folderFilter = document.getElementById('folderFilter').value;
+  const deadOnly = document.getElementById('deadOnly').checked;
+  const popularOnly = document.getElementById('popularOnly').checked;
+  const dynamicOnly = document.getElementById('dynamicOnly').checked;
+  const externalOnly = document.getElementById('externalOnly').checked;
+  const minPop = parseInt(document.getElementById('minPop').value || '0', 10);
+  const minDegree = parseInt(document.getElementById('minDegree').value || '0', 10);
+  const maxNodes = parseInt(document.getElementById('maxNodes').value || '5000', 10);
+
+  const visible = [];
+  nodes.forEach(n => {
+    let ok = !state.hidden.has(n.id);
+    if (state.isolateNode) {
+      const neighbors = new Set(mainNetwork.getConnectedNodes(state.isolateNode));
+      neighbors.add(state.isolateNode);
+      ok = neighbors.has(n.id);
+    }
+    if (ok && includeTerms.length) ok = nodeMatchesSearch(n, includeTerms, excludeTerms, mode, caseSensitive);
+    if (ok && excludeTerms.length && !includeTerms.length) ok = nodeMatchesSearch(n, [], excludeTerms, mode, caseSensitive);
+    if (ok && invert) ok = !nodeMatchesSearch(n, includeTerms, excludeTerms, mode, caseSensitive);
+    if (ok && typeFilter !== 'all') ok = kindGroup(n.label) === typeFilter;
+    if (ok && folderFilter !== 'all') ok = (n.group || '.') === folderFilter;
+    if (ok && deadOnly) ok = !!n.dead;
+    if (ok && popularOnly) ok = (n.popularity || 0) >= minPop;
+    if (ok && dynamicOnly) ok = !!n.dynamic;
+    if (ok && externalOnly) ok = !!n.external;
+    if (ok && (n.degree || 0) < minDegree) ok = false;
+    visible.push({ id: n.id, ok });
+  });
+
+  const keep = new Set(visible.filter(v => v.ok).slice(0, maxNodes).map(v => v.id));
+  nodes.forEach(n => nodes.update({ id: n.id, hidden: !keep.has(n.id) }));
+  edges.forEach(e => {
+    const show = keep.has(e.from) && keep.has(e.to);
+    edges.update({ id: e.id, hidden: !show });
+  });
+
+  const shown = nodes.get({ filter: n => !n.hidden });
+  document.getElementById('statNodes').textContent = shown.length;
+  document.getElementById('statEdges').textContent = edges.get({ filter: e => !e.hidden }).length;
+  document.getElementById('statDead').textContent = meta.deadLinks || 0;
+  document.getElementById('statPopular').textContent = shown.filter(n => (n.popularity || 0) > 0).length;
+  document.getElementById('statOrphans').textContent = meta.orphanNodes || 0;
+  document.getElementById('statHubs').textContent = meta.hubNodes || 0;
+  document.getElementById('statAvgDegree').textContent = meta.averageDegree || 0;
+}
+
+function resetAll() {
+  state.hidden.clear();
+  state.isolateNode = null;
+  document.getElementById('include').value = '';
+  document.getElementById('exclude').value = '';
+  document.getElementById('matchMode').value = 'all';
+  document.getElementById('invert').checked = false;
+  document.getElementById('caseSensitive').checked = false;
+  document.getElementById('typeFilter').value = 'all';
+  document.getElementById('folderFilter').value = 'all';
+  document.getElementById('deadOnly').checked = false;
+  document.getElementById('popularOnly').checked = false;
+  document.getElementById('dynamicOnly').checked = false;
+  document.getElementById('minPop').value = '1';
+  document.getElementById('minDegree').value = '1';
+  document.getElementById('maxNodes').value = '5000';
+  nodes.forEach(n => nodes.update({ id: n.id, hidden: false }));
+  edges.forEach(e => edges.update({ id: e.id, hidden: false }));
+  setSelected(null);
+  fitGraph();
+}
+
+function fitGraph() {
+  mainNetwork.fit({ animation: { duration: 250, easingFunction: 'easeInOutQuad' } });
+}
+
+function relayout() {
+  mainNetwork.setOptions({ physics: true });
+  mainNetwork.once('stabilizationIterationsDone', () => mainNetwork.setOptions({ physics: false }));
+}
+
+function setSelected(node) {
+  const box = document.getElementById('selectedInfo');
+  if (!node) {
+    box.innerHTML = '<div class="small">Nothing selected.</div>';
+    document.getElementById('copyBtn').disabled = true;
+    return;
+  }
+  document.getElementById('copyBtn').disabled = false;
+  box.innerHTML = '';
+  const rows = [
+    ['Label', node.label],
+    ['Type', node.kind || kindGroup(node.label)],
+    ['Folder', node.group || '.'],
+    ['Degree', String(node.degree || 0)],
+    ['Popularity', String(node.popularity || 0)],
+    ['Size', String(node.size || 0) + ' bytes'],
+    ['Dead', node.dead ? 'yes' : 'no'],
+    ['Dynamic', node.dynamic ? 'yes' : 'no'],
+    ['External', node.external ? 'yes' : 'no'],
+  ];
+  rows.forEach(([k, v]) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'kv';
+    const a = document.createElement('div');
+    a.textContent = k;
+    const b = document.createElement('div');
+    b.textContent = v;
+    wrap.appendChild(a); wrap.appendChild(b);
+    box.appendChild(wrap);
+  });
+}
+
+function focusNode(id) {
+  const node = nodes.get(id);
+  if (!node) return;
+  state.isolateNode = null;
+  setSelected(node);
+  mainNetwork.selectNodes([id]);
+  mainNetwork.focus(id, { scale: 1.5, animation: { duration: 250, easingFunction: 'easeInOutQuad' } });
+  applyFilters();
+  updateUrlAnchor(id);
+  closeSidebar();
+}
+
+function isolateNode(id) {
+  const node = nodes.get(id);
+  if (!node) return;
+  state.isolateNode = id;
+  setSelected(node);
+  mainNetwork.selectNodes([id]);
+  mainNetwork.focus(id, { scale: 1.6, animation: { duration: 250, easingFunction: 'easeInOutQuad' } });
+  applyFilters();
+  updateUrlAnchor(id);
+  closeSidebar();
+}
+
+function updateUrlAnchor(id) {
+  window.history.replaceState(null, '', '#' + encodeURIComponent(id));
+}
+
+function showNodeAndNeighbors(id) {
+  state.isolateNode = id;
+  applyFilters();
+}
+
+function hideNode(id) {
+  state.hidden.add(id);
+  applyFilters();
+}
+
+function showAllNodes() {
+  resetAll();
+}
+
+function copySelected() {
+  const nodeId = mainNetwork.getSelectedNodes()[0];
+  if (!nodeId) return;
+  const node = nodes.get(nodeId);
+  if (!node) return;
+  navigator.clipboard?.writeText(node.label || '').catch(() => {});
+}
+
+function toggleFullscreen() {
+  const main = document.getElementById('main');
+  if (!document.fullscreenElement) {
+    main.requestFullscreen?.().catch(() => {});
+  } else {
+    document.exitFullscreen?.().catch(() => {});
+  }
+}
+
+function toggleMini() {
+  const wrap = document.getElementById('miniWrap');
+  state.miniVisible = !state.miniVisible;
+  wrap.style.display = state.miniVisible ? 'block' : 'none';
+  if (state.miniVisible) miniNetwork.redraw();
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  state.sidebarOpen = !state.sidebarOpen;
+  sidebar.classList.toggle('open', state.sidebarOpen);
+}
+
+function closeSidebar() {
+  if (window.innerWidth <= 768) {
+    const sidebar = document.getElementById('sidebar');
+    state.sidebarOpen = false;
+    sidebar.classList.remove('open');
+  }
+}
+
+// Context menu
+const menu = document.getElementById('contextMenu');
+function hideMenu() { menu.style.display = 'none'; }
+function showMenu(x, y) {
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.style.display = 'block';
+}
+let contextNodeId = null;
+
+const mainEl = document.getElementById('network');
+mainEl.addEventListener('contextmenu', (ev) => {
+  ev.preventDefault();
+  const rect = mainEl.getBoundingClientRect();
+  const pos = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+  const id = mainNetwork.getNodeAt(pos);
+  contextNodeId = id || null;
+  if (id) showMenu(ev.clientX, ev.clientY); else hideMenu();
+});
+
+window.addEventListener('click', hideMenu);
+window.addEventListener('resize', () => { if (state.miniVisible) miniNetwork.redraw(); });
+
+// Help modal
+const helpModal = document.getElementById('helpModal');
+function showHelp() { helpModal.style.display = 'flex'; }
+function closeHelp() { helpModal.style.display = 'none'; }
+
+window.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape') { 
+    hideMenu();
+    closeHelp();
+    if (state.isolateNode) { state.isolateNode = null; applyFilters(); } 
+  }
+  if (ev.key === '?') { showHelp(); }
+  if (ev.key === 'm' || ev.key === 'M') { toggleSidebar(); }
+  if (ev.shiftKey && (ev.key === 'M')) { toggleMini(); }
+  if (ev.key === 'f' || ev.key === 'F') { if (!ev.shiftKey) fitGraph(); }
+  if (ev.shiftKey && ev.key === 'F') { toggleFullscreen(); }
+  if (ev.key === 'Enter') { applyFilters(); }
+  if (ev.shiftKey && ev.key === 'R') { resetAll(); }
+});
+
+// Events
+mainNetwork.on('click', params => {
+  hideMenu();
+  if (params.nodes.length) setSelected(nodes.get(params.nodes[0]));
+  else setSelected(null);
+});
+mainNetwork.on('doubleClick', params => {
+  if (params.nodes.length) isolateNode(params.nodes[0]);
+});
+mainNetwork.on('hoverNode', params => {
+  const node = nodes.get(params.node);
+  if (node) setSelected(node);
+});
+
+// Chip wiring
+applyChip('invertChip', 'invert');
+applyChip('caseChip', 'caseSensitive');
+applyChip('deadChip', 'deadOnly');
+applyChip('popChip', 'popularOnly');
+applyChip('dynChip', 'dynamicOnly');
+applyChip('extChip', 'externalOnly');
+
+// Event listeners
+['include','exclude','matchMode','invert','caseSensitive','typeFilter','folderFilter','deadOnly','popularOnly','dynamicOnly','externalOnly','minPop','minDegree','maxNodes'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', applyFilters);
+  el.addEventListener('change', applyFilters);
+});
+
+// Button handlers
+document.getElementById('applyBtn').addEventListener('click', applyFilters);
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+document.getElementById('fitBtn').addEventListener('click', fitGraph);
+document.getElementById('relayoutBtn').addEventListener('click', relayout);
+document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+document.getElementById('miniBtn').addEventListener('click', toggleMini);
+document.getElementById('showAllBtn').addEventListener('click', showAllNodes);
+document.getElementById('sidebarToggle').addEventListener('click', toggleSidebar);
+document.getElementById('helpBtn').addEventListener('click', showHelp);
+
+function _exportState() {
+  const snapshot = {
+    selected: mainNetwork.getSelectedNodes(),
+    hidden: [...state.hidden],
+    isolateNode: state.isolateNode,
+    filters: {
+      include: document.getElementById('include').value,
+      exclude: document.getElementById('exclude').value,
+      matchMode: document.getElementById('matchMode').value,
+      type: document.getElementById('typeFilter').value,
+      folder: document.getElementById('folderFilter').value,
+    }
+  };
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'linkgraph_state.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function _exportJSON() {
+  const payload = { nodes: nodes.get(), edges: edges.get(), meta };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'linkgraph_export.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function _exportCSV() {
+  const rows = [['id','label','group','kind','degree','popularity','dead','dynamic','external','size']];
+  nodes.get().forEach(n => {
+    rows.push([
+      n.id,
+      n.label,
+      n.group || '',
+      n.kind || '',
+      n.degree || 0,
+      n.popularity || 0,
+      n.dead ? '1' : '0',
+      n.dynamic ? '1' : '0',
+      n.external ? '1' : '0',
+      n.size || 0,
+    ]);
+  });
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('
+');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'linkgraph_export.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+document.getElementById('exportBtn').addEventListener('click', _exportState);
+document.getElementById('exportJsonBtn').addEventListener('click', _exportJSON);
+document.getElementById('exportCsvBtn').addEventListener('click', _exportCSV);
+
+document.getElementById('copyBtn').addEventListener('click', copySelected);
+
+// Context menu handlers
+document.getElementById('ctxFocus').addEventListener('click', () => { if (contextNodeId) focusNode(contextNodeId); hideMenu(); });
+document.getElementById('ctxNeighbors').addEventListener('click', () => { if (contextNodeId) isolateNode(contextNodeId); hideMenu(); });
+document.getElementById('ctxHide').addEventListener('click', () => { if (contextNodeId) hideNode(contextNodeId); hideMenu(); });
+document.getElementById('ctxShowAll').addEventListener('click', () => { showAllNodes(); hideMenu(); });
+
+// Close help modal on outside click
+helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelp(); });
+
+// Initialization
+parseUrlAnchor();
+renderMetaLists();
+resetAll();
+
+// Deep link support
+if (state.nodeIdFromUrl) {
+  setTimeout(() => focusNode(state.nodeIdFromUrl), 500);
+}
+</script>
+</body>
+</html>
