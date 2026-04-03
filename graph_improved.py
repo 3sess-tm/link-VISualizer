@@ -413,22 +413,36 @@ def resolve_target(base_dir: Path, raw_link: str, root: Path, scan_exts: set[str
     if dynamic:
         return clean, True, False, candidate
 
-    if candidate.exists():
+    # Handle path too long errors gracefully
+    try:
+        if candidate.exists():
+            return clean, False, False, candidate
+    except OSError as e:
+        # Path too long or other filesystem error - treat as non-existent
+        log(f"Skipping path due to error: {e}", "DEBUG")
         return clean, False, False, candidate
 
     # Try extension guesses
     if '.' not in Path(clean).name:
         for ext in sorted(scan_exts):
             trial = candidate.with_suffix('.' + ext)
-            if trial.exists():
-                return str(trial.relative_to(root)).replace('\\', '/'), False, False, trial
+            try:
+                if trial.exists():
+                    return str(trial.relative_to(root)).replace('\\', '/'), False, False, trial
+            except OSError as e:
+                log(f"Skipping trial path due to error: {e}", "DEBUG")
+                continue
+        
         for ext in ('html', 'htm', 'php', 'md'):
             trial = candidate / ('index.' + ext)
-            if trial.exists():
-                return str(trial.relative_to(root)).replace('\\', '/'), False, False, trial
+            try:
+                if trial.exists():
+                    return str(trial.relative_to(root)).replace('\\', '/'), False, False, trial
+            except OSError as e:
+                log(f"Skipping index trial path due to error: {e}", "DEBUG")
+                continue
 
     return clean, False, False, candidate
-
 
 # ===== LOG POPULARITY PARSING =====
 def normalize_request_path(req: str) -> str:
